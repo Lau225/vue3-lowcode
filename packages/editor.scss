@@ -48,6 +48,8 @@
             height: 660px;
             overflow: auto;
             background-color: yellow;
+            width:1300px;
+            margin: 0 auto;
             &_canvas{
                 margin: 20px auto;
                 position: relative;
@@ -77,6 +79,6 @@
 }
 .editor-block-focus{
     &::after{
-        border: 1px solid red;
+        border: 3px solid red;
     }
 }

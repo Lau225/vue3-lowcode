@@ -7,6 +7,7 @@
         class="editor-left-item"
         draggable="true"
         @dragstart="(e) => dragstart(e, item)"
+        @dragend="(e) => dragend(e)"
       >
         <span>{{ item.label }}</span>
         <el-button v-if="config.componentMap[item.key].key === 'button'">{{
@@ -26,12 +27,16 @@
           class="editor-middle-content_canvas"
           :style="containerStyles"
           ref="containerRef"
+          @mousedown="clearBlockFocus"
         >
           <div
-            class="editor-block"
+            :class="
+              item.focus ? 'editor-block editor-block-focus' : 'editor-block'
+            "
             :ref="'blockRef' + index"
             v-for="(item, index) in data.blocks"
             :key="index"
+            @mousedown="(e) => handleMouseDown(e, item)"
             :style="{
               top: `${item.top}px`,
               left: `${item.left}px`,
@@ -74,6 +79,9 @@ const containerStyles = computed(() => {
   return {
     width: data.value.container.width,
     height: data.value.container.height,
+    overflow: "auto",
+    background: "green",
+    margin: "10px 10px 10px 10px",
   };
 });
 let data = computed({
@@ -96,6 +104,58 @@ let currentComponent = null;
 const dragenter = (e) => {
   e.preventDefault();
   e.dataTransfer.dropEffect = "move";
+};
+const clearBlockFocus = () => {
+  data.value.blocks.forEach((item) => {
+    item.focus = false;
+  });
+};
+
+const handleMouseDown = (e, item) => {
+  e.preventDefault();
+  e.stopPropagation();
+  if (e.ctrlKey) {
+    item.focus = !item.focus;
+  } else {
+    if (!item.focus) {
+      clearBlockFocus();
+      item.focus = true; // 清空其他人的
+    } else {
+      item.focus = false;
+    }
+  }
+  mousedown(e);
+};
+
+let dragState = {
+  startX: 0,
+  startY: 0,
+};
+
+const mousemove = (e) => {
+  let { clientX: moveX, clientY: moveY } = e;
+  let durX = moveX - dragState.startX;
+  let durY = moveY - dragState.startY;
+
+  focusData.value.focus.forEach((item, index) => {
+    item.top = dragState.startPos[index].top + durY;
+    item.left = dragState.startPos[index].left + durX;
+  });
+};
+
+const mousedown = (e) => {
+  dragState = {
+    startX: e.clientX,
+    startY: e.clientY, // 记录每一个选中的位置
+    startPos: focusData.value.focus.map(({ top, left }) => ({ top, left })),
+  };
+  document.addEventListener("mousemove", mousemove);
+  document.addEventListener("mouseup", mouseup);
+};
+
+const mouseup = (e) => {
+  document.removeEventListener("mousemove", mousemove);
+  document.removeEventListener("mouseup", mouseup);
 };
 const dragleave = (e) => {
   e.preventDefault();
@@ -143,6 +203,18 @@ watch(
   }
 );
 
+const focusData = computed(() => {
+  let focus = [];
+  let unfocused = [];
+  data.value.blocks.forEach((item) => {
+    item.focus ? focus.push(item) : unfocused.push(item);
+  });
+  return {
+    focus,
+    unfocused,
+  };
+});
+
 const dragstart = (e, component) => {
   // 只保存必要的数据，而不是整个组件对象
   currentComponent = {
@@ -151,13 +223,17 @@ const dragstart = (e, component) => {
     // 如果需要其他必要的数据，可以在这里添加
   };
 
-  // 使用 dataTransfer 设置拖拽数据
-  e.dataTransfer.setData("text/plain", component.key);
-
   // 添加事件监听器
   containerRef.value.addEventListener("dragover", dragover);
   containerRef.value.addEventListener("drop", drop);
   containerRef.value.addEventListener("dragleave", dragleave);
   containerRef.value.addEventListener("dragenter", dragenter);
+};
+const dragend = (e) => {
+  // 移除事件监听器
+  containerRef.value.removeEventListener("dragover", dragover);
+  containerRef.value.removeEventListener("drop", drop);
+  containerRef.value.removeEventListener("dragleave", dragleave);
+  containerRef.value.removeEventListener("dragenter", dragenter);
 };
 </script>

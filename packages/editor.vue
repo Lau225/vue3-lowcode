@@ -21,7 +21,6 @@
       </div>
     </div>
     <div class="editor-middle">
-      <div class="editor-middle-top">菜单</div>
       <div class="editor-middle-content">
         <div
           class="editor-middle-content_canvas"
@@ -36,7 +35,7 @@
             :ref="'blockRef' + index"
             v-for="(item, index) in data.blocks"
             :key="index"
-            @mousedown="(e) => handleMouseDown(e, item)"
+            @mousedown="(e) => handleMouseDown(e, item, index)"
             :style="{
               top: `${item.top}px`,
               left: `${item.left}px`,
@@ -55,6 +54,16 @@
               config.componentMap[item.key].label
             }}</span>
           </div>
+          <div
+            class="line-x"
+            v-if="markLine.x !== null"
+            :style="{ left: markLine.x + 'px' }"
+          ></div>
+          <div
+            class="line-y"
+            v-if="markLine.y !== null"
+            :style="{ top: markLine.y + 'px' }"
+          ></div>
         </div>
       </div>
     </div>
@@ -72,16 +81,16 @@ import {
   watch,
   getCurrentInstance,
   nextTick,
+  reactive,
 } from "vue";
 import { ElButton, ElInput } from "element-plus";
 const config = inject("config");
 const containerStyles = computed(() => {
   return {
-    width: data.value.container.width,
-    height: data.value.container.height,
+    width: data.value.container.width + "px",
+    height: data.value.container.height + "px",
     overflow: "auto",
     background: "green",
-    margin: "10px 10px 10px 10px",
   };
 });
 let data = computed({
@@ -109,21 +118,25 @@ const clearBlockFocus = () => {
   data.value.blocks.forEach((item) => {
     item.focus = false;
   });
+  selectIndex.value = -1;
 };
 
-const handleMouseDown = (e, item) => {
+const handleMouseDown = (e, item, index) => {
   e.preventDefault();
   e.stopPropagation();
   if (e.ctrlKey) {
-    item.focus = !item.focus;
+    if (focusData.value.focus.length <= 1) {
+      item.focus = true;
+    } else {
+      item.focus = !item.focus;
+    }
   } else {
     if (!item.focus) {
       clearBlockFocus();
       item.focus = true; // 清空其他人的
-    } else {
-      item.focus = false;
-    }
+    } //当自己已经被选中了，再次点击还是选中状态
   }
+  selectIndex.value = index;
   mousedown(e);
 };
 
@@ -132,8 +145,108 @@ let dragState = {
   startY: 0,
 };
 
+let markLine = reactive({
+  x: null,
+  y: null,
+});
+
+const selectIndex = ref(-1); // 表示没有任何一个被选中
+
+const lastSelectBlock = computed(() => data.value.blocks[selectIndex.value]); // 最后选择的元素
+
+const mousedown = (e) => {
+  const { width: BWidth, height: BHeight } = lastSelectBlock.value;
+
+  dragState = {
+    startX: e.clientX,
+    startY: e.clientY, // 记录每一个选中的位置
+    startLeft: lastSelectBlock.value.left,
+    startTop: lastSelectBlock.value.top,
+    startPos: focusData.value.focus.map(({ top, left }) => ({ top, left })),
+    line: (() => {
+      const { unfocused } = focusData.value; // 获取没选中的 以他们的位置做辅助线
+
+      let lines = { x: [], y: [] };
+
+      [
+        ...unfocused,
+        {
+          top: 0,
+          left: 0,
+          width: data.value.container.width,
+          height: data.value.container.height,
+        },
+      ].forEach((item) => {
+        const { top: ATop, left: ALeft, width: AWidth, height: AHeight } = item;
+        // 当此元素拖拽到和A元素top一致的时候，要显示这跟辅助线
+        lines.y.push({ showTop: ATop, top: ATop });
+        lines.y.push({ showTop: ATop, top: ATop - BHeight }); // 顶对底
+        lines.y.push({
+          showTop: ATop + AHeight / 2,
+          top: ATop + AHeight / 2 - BHeight / 2,
+        }); // 中对中
+        lines.y.push({
+          showTop: ATop + AHeight,
+          top: ATop + AHeight,
+        });
+        lines.y.push({
+          showTop: ATop + AHeight,
+          top: ATop + AHeight - BHeight,
+        }); // 底对顶
+
+        lines.x.push({ showLeft: ALeft, left: ALeft });
+        lines.x.push({ showLeft: ALeft + AWidth, left: ALeft + BWidth }); // 右对左
+        lines.x.push({
+          showLeft: ALeft + AWidth / 2,
+          left: ALeft + AWidth / 2 - BWidth / 2,
+        }); // 中对中
+        lines.x.push({
+          showLeft: ALeft + AWidth,
+          left: ALeft + AWidth - BWidth,
+        }); // 左对右
+        lines.x.push({ showLeft: ALeft, left: ALeft - BWidth }); // 左对左
+      });
+      return lines;
+    })(),
+  };
+  document.addEventListener("mousemove", mousemove);
+  document.addEventListener("mouseup", mouseup);
+};
 const mousemove = (e) => {
   let { clientX: moveX, clientY: moveY } = e;
+  console.log(dragState);
+
+  // 计算当前元素最新的left和top 去线里面找
+  // 鼠标移动后 - 鼠标移动前 + left
+  let left = moveX - dragState.startX + dragState.startLeft;
+  let top = moveY - dragState.startY + dragState.startTop;
+
+  // 先计算横线 距离参照物元素还有5像素的时候 就显示这根线
+  let y = null;
+  let x = null;
+  for (let i = 0; i < dragState.line.y.length; i++) {
+    const { top: t, showTop: s } = dragState.line.y[i];
+    if (Math.abs(t - top) < 5) {
+      y = s;
+      moveY = dragState.startY - dragState.startTop + t; // 容器距离顶部的距离 + 目标的高度
+      // 实现快速和这个元素贴在一起
+
+      break; // 找到一根后就退出循环
+    }
+  }
+  for (let i = 0; i < dragState.line.x.length; i++) {
+    const { left: l, showTop: s } = dragState.line.x[i];
+    if (Math.abs(l - left) < 5) {
+      x = s;
+      moveX = dragState.startX - dragState.startLeft + l; // 容器距离顶部的距离 + 目标的高度
+      // 实现快速和这个元素贴在一起
+
+      break; // 找到一根后就退出循环
+    }
+  }
+  markLine.x = x;
+  markLine.y = y;
+
   let durX = moveX - dragState.startX;
   let durY = moveY - dragState.startY;
 
@@ -142,20 +255,11 @@ const mousemove = (e) => {
     item.left = dragState.startPos[index].left + durX;
   });
 };
-
-const mousedown = (e) => {
-  dragState = {
-    startX: e.clientX,
-    startY: e.clientY, // 记录每一个选中的位置
-    startPos: focusData.value.focus.map(({ top, left }) => ({ top, left })),
-  };
-  document.addEventListener("mousemove", mousemove);
-  document.addEventListener("mouseup", mouseup);
-};
-
 const mouseup = (e) => {
   document.removeEventListener("mousemove", mousemove);
   document.removeEventListener("mouseup", mouseup);
+  markLine.x = null;
+  markLine.y = null;
 };
 const dragleave = (e) => {
   e.preventDefault();
@@ -188,16 +292,16 @@ const dragover = (e) => {
 watch(
   () => props.modelValue,
   (value) => {
-    nextTick(() => {
-      value.blocks.forEach((item) => {
+    value.blocks.forEach((item) => {
+      nextTick(() => {
+        let { offsetWidth, offsetHeight } = proxy.$refs[item.ref][0];
         if (item.alignCenter) {
-          let { offsetWidth, offsetHeight } = proxy.$refs[item.ref][0];
-          console.log(proxy.$refs[item.ref][0]);
-
           item.left = item.left - offsetWidth / 2;
           item.top = item.top - offsetHeight / 2;
           item.alignCenter = false;
         }
+        item.width = offsetWidth;
+        item.height = offsetHeight;
       });
     });
   }

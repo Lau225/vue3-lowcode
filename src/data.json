@@ -1,9 +1,15 @@
 {
     "container":{
         "width":1000,
-        "height":600
+        "height":770
     },
     "blocks":[
-      
+        {
+            "top":100,
+            "left":100,
+            "zIndex":1,
+            "key":"text",
+            "ref":"blockRef0"
+        }
     ]
 }

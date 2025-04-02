@@ -4,6 +4,7 @@
   overflow: hidden;
   &-left {
     width: 270px;
+    min-height: 800px;
     background-color: red;
     position: absolute;
     height: 100%;
@@ -37,9 +38,11 @@
     left: 270px;
     right: 270px;
     height: 100%;
+    min-height: 800px;
     margin-left: 20px;
     margin-right: 20px;
     &-top {
+      position: absolute;
       background-color: rgb(92, 92, 175);
       height: 50px;
     }
@@ -49,6 +52,14 @@
       background-color: yellow;
       width: 1300px;
       margin: 0 auto;
+      &-top {
+        height: 80px;
+        background-color: grey;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
       &_canvas {
         position: relative;
         top: 50%;
@@ -61,6 +72,7 @@
     width: 270px;
     top: 0;
     bottom: 0;
+    min-height: 800px;
     right: 0;
     background-color: red;
     position: absolute;

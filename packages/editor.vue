@@ -22,6 +22,22 @@
     </div>
     <div class="editor-middle">
       <div class="editor-middle-content">
+        <div class="editor-middle-content-top">
+          <el-button style="width: 60px; height: 30px" @click="back"
+            >后退</el-button
+          >
+          <el-button style="width: 60px; height: 30px" @click="reset"
+            >前进</el-button
+          >
+          <el-button style="width: 60px; height: 30px" @click="exports"
+            >导出</el-button
+          >
+          <el-button
+            style="width: 60px; height: 30px"
+            @click="outerVisible = true"
+            >导入</el-button
+          >
+        </div>
         <div
           class="editor-middle-content_canvas"
           :style="containerStyles"
@@ -69,6 +85,41 @@
     </div>
     <div class="editor-right">属性控制栏目</div>
   </div>
+  <el-dialog v-model="outerVisible" title="导入JSON">
+    <template #default>
+      <el-input
+        v-model="json"
+        type="textarea"
+        :autosize="{ minRows: 10, maxRows: 10 }"
+      />
+    </template>
+    <template #footer>
+      <div class="dialog-footer">
+        <el-button
+          @click="
+            outerVisible = false;
+            json = '';
+          "
+          >取消</el-button
+        >
+        <el-button @click="imports">导入</el-button>
+      </div>
+    </template>
+  </el-dialog>
+  <el-dialog v-model="exportVisible" title="导出JSON">
+    <template #default>
+      <el-input
+        v-model="exportJson"
+        type="textarea"
+        :autosize="{ minRows: 10, maxRows: 10 }"
+      />
+    </template>
+    <template #footer>
+      <div class="dialog-footer">
+        <el-button @click="exportVisible = false">取消</el-button>
+      </div>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup>
@@ -83,8 +134,14 @@ import {
   nextTick,
   reactive,
 } from "vue";
-import { ElButton, ElInput } from "element-plus";
+import { ElButton, ElInput, ElDialog, ElMessage } from "element-plus";
+import { useCommands } from "../utils/useCommand";
+import { events } from "../utils/event";
 const config = inject("config");
+const outerVisible = ref(false);
+const exportVisible = ref(false);
+const json = ref("");
+const exportJson = ref("");
 const containerStyles = computed(() => {
   return {
     width: data.value.container.width + "px",
@@ -143,6 +200,7 @@ const handleMouseDown = (e, item, index) => {
 let dragState = {
   startX: 0,
   startY: 0,
+  dragging: false, // 默认不是正在拖拽
 };
 
 let markLine = reactive({
@@ -163,6 +221,7 @@ const mousedown = (e) => {
     startLeft: lastSelectBlock.value.left,
     startTop: lastSelectBlock.value.top,
     startPos: focusData.value.focus.map(({ top, left }) => ({ top, left })),
+    dragging: false,
     line: (() => {
       const { unfocused } = focusData.value; // 获取没选中的 以他们的位置做辅助线
 
@@ -214,7 +273,10 @@ const mousedown = (e) => {
 };
 const mousemove = (e) => {
   let { clientX: moveX, clientY: moveY } = e;
-  console.log(dragState);
+  if (!dragState.dragging) {
+    dragState.dragging = true;
+    events.emit("start"); // 触发事件就会记住当前的位置
+  }
 
   // 计算当前元素最新的left和top 去线里面找
   // 鼠标移动后 - 鼠标移动前 + left
@@ -235,7 +297,7 @@ const mousemove = (e) => {
     }
   }
   for (let i = 0; i < dragState.line.x.length; i++) {
-    const { left: l, showTop: s } = dragState.line.x[i];
+    const { left: l, showLeft: s } = dragState.line.x[i];
     if (Math.abs(l - left) < 5) {
       x = s;
       moveX = dragState.startX - dragState.startLeft + l; // 容器距离顶部的距离 + 目标的高度
@@ -260,6 +322,10 @@ const mouseup = (e) => {
   document.removeEventListener("mouseup", mouseup);
   markLine.x = null;
   markLine.y = null;
+  if (dragState.dragging) {
+    console.log("mouseup");
+    events.emit("end"); // 触发事件就会记住当前的位置
+  }
 };
 const dragleave = (e) => {
   e.preventDefault();
@@ -292,6 +358,8 @@ const dragover = (e) => {
 watch(
   () => props.modelValue,
   (value) => {
+    console.log("value");
+
     value.blocks.forEach((item) => {
       nextTick(() => {
         let { offsetWidth, offsetHeight } = proxy.$refs[item.ref][0];
@@ -304,7 +372,8 @@ watch(
         item.height = offsetHeight;
       });
     });
-  }
+  },
+  { deep: true }
 );
 
 const focusData = computed(() => {
@@ -332,6 +401,7 @@ const dragstart = (e, component) => {
   containerRef.value.addEventListener("drop", drop);
   containerRef.value.addEventListener("dragleave", dragleave);
   containerRef.value.addEventListener("dragenter", dragenter);
+  events.emit("start"); // 发布事件
 };
 const dragend = (e) => {
   // 移除事件监听器
@@ -339,5 +409,38 @@ const dragend = (e) => {
   containerRef.value.removeEventListener("drop", drop);
   containerRef.value.removeEventListener("dragleave", dragleave);
   containerRef.value.removeEventListener("dragenter", dragenter);
+  events.emit("end"); // 发布事件
+};
+
+const { commands } = useCommands(data);
+const back = () => {
+  commands.undo();
+};
+
+const reset = () => {
+  commands.redo();
+};
+
+const exports = () => {
+  exportVisible.value = true;
+  exportJson.value = JSON.stringify(data.value.blocks);
+};
+
+const imports = () => {
+  if (json.value !== "") {
+    let arr = JSON.parse(JSON.stringify(data.value.blocks));
+    JSON.parse(json.value).forEach((item) => {
+      item.ref = "blockRef" + arr.length;
+      arr.push(item);
+    });
+    console.log(arr);
+
+    data.value.blocks = arr;
+
+    outerVisible.value = false;
+    json.value = "";
+  } else {
+    ElMessage.error("填写json格式的数据");
+  }
 };
 </script>

@@ -26,7 +26,6 @@ export function useCommands(data) {
             }
             queue.push({ redo, undo }) // 保存指令前进和后退
             state.current = current + 1
-            console.log(queue);
 
         }
     }

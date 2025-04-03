@@ -9,7 +9,8 @@
             "left":100,
             "zIndex":1,
             "key":"text",
-            "ref":"blockRef0"
+            "ref":"blockRef0",
+            "value":"测试文本"
         }
     ]
 }

@@ -1,6 +1,6 @@
 <template>
   <div class="editor">
-    <div class="editor-left">
+    <div class="editor-left" v-if="!fullScreenShow">
       <div
         v-for="(item, index) in config.componentList"
         :key="index"
@@ -22,7 +22,16 @@
     </div>
     <div class="editor-middle">
       <div class="editor-middle-content">
-        <div class="editor-middle-content-top">
+        <div v-if="fullScreenShow">
+          <el-button
+            @click="
+              fullScreenShow = false;
+              previewRef = false;
+            "
+            >退出全屏预览</el-button
+          >
+        </div>
+        <div class="editor-middle-content-top" v-if="!fullScreenShow">
           <el-button style="width: 60px; height: 30px" @click="back"
             >后退</el-button
           >
@@ -37,6 +46,19 @@
             @click="outerVisible = true"
             >导入</el-button
           >
+          <el-button style="width: 60px; height: 30px" @click="del"
+            >删除</el-button
+          >
+          <el-button @click="handleData">{{
+            previewRef ? "编辑" : "预览"
+          }}</el-button>
+          <el-button
+            @click="
+              fullScreenShow = true;
+              previewRef = true;
+            "
+            >全屏展示</el-button
+          >
         </div>
         <div
           class="editor-middle-content_canvas"
@@ -46,29 +68,43 @@
         >
           <div
             :class="
-              item.focus ? 'editor-block editor-block-focus' : 'editor-block'
+              previewRef
+                ? item.focus
+                  ? 'editor-block editor-block-focus editor-block-preview'
+                  : 'editor-block-preview editor-block'
+                : item.focus
+                ? 'editor-block editor-block-focus'
+                : 'editor-block'
             "
             :ref="'blockRef' + index"
             v-for="(item, index) in data.blocks"
             :key="index"
+            @click.stop="selected('blockRef' + index, item)"
             @mousedown="(e) => handleMouseDown(e, item, index)"
             :style="{
               top: `${item.top}px`,
               left: `${item.left}px`,
               zIndex: `${item.zIndex}`,
+              color: item.color ? item.color : 'black',
+              fontSize: item.size ? `${item.size}px` : '16px',
             }"
           >
-            <el-button v-if="config.componentMap[item.key].key === 'button'">{{
-              config.componentMap[item.key].label
-            }}</el-button>
+            <el-button
+              :type="item.type ? item.type : 'default'"
+              :size="item.size ? item.size : 'default'"
+              v-if="item.key === 'button'"
+            >
+              {{ item.value ? item.value : "按钮" }}
+            </el-button>
             <el-input
               style="width: 200px"
-              v-if="config.componentMap[item.key].key === 'input'"
+              v-model="item.value"
+              v-if="item.key === 'input'"
               placeholder="请输入"
             ></el-input>
-            <span v-if="config.componentMap[item.key].key === 'text'">{{
-              config.componentMap[item.key].label
-            }}</span>
+            <span v-if="item.key === 'text'">
+              {{ item.value ? item.value : "文本" }}
+            </span>
           </div>
           <div
             class="line-x"
@@ -83,7 +119,9 @@
         </div>
       </div>
     </div>
-    <div class="editor-right">属性控制栏目</div>
+    <div class="editor-right" v-if="!fullScreenShow">
+      <Operation :type="type" v-model:data="data" :item="currentItem" />
+    </div>
   </div>
   <el-dialog v-model="outerVisible" title="导入JSON">
     <template #default>
@@ -124,6 +162,7 @@
 
 <script setup>
 import "./editor.scss";
+import Operation from "../packages/operation.vue";
 import {
   ref,
   inject,
@@ -137,7 +176,9 @@ import {
 import { ElButton, ElInput, ElDialog, ElMessage } from "element-plus";
 import { useCommands } from "../utils/useCommand";
 import { events } from "../utils/event";
+import full from "core-js/full";
 const config = inject("config");
+const fullScreenShow = ref(false);
 const outerVisible = ref(false);
 const exportVisible = ref(false);
 const json = ref("");
@@ -147,7 +188,7 @@ const containerStyles = computed(() => {
     width: data.value.container.width + "px",
     height: data.value.container.height + "px",
     overflow: "auto",
-    background: "green",
+    background: "#efe6e6cc",
   };
 });
 let data = computed({
@@ -161,17 +202,44 @@ let data = computed({
 let { proxy } = getCurrentInstance();
 const emit = defineEmits(["update:modelValue"]);
 const containerRef = ref(null);
+const type = ref("");
 const props = defineProps({
   modelValue: {
     type: Object,
   },
 });
+const currentItem = ref();
 let currentComponent = null;
 const dragenter = (e) => {
   e.preventDefault();
   e.dataTransfer.dropEffect = "move";
 };
+const currentRef = ref("");
+const selected = (ref, item) => {
+  if (previewRef.value) return;
+  type.value = item.key;
+  currentRef.value = ref;
+  currentItem.value = item;
+};
+const del = () => {
+  if (currentRef.value === "") {
+    return ElMessage.error("请先选择一个组件");
+  }
+  let index = data.value.blocks.findIndex(
+    (item) => item.ref === currentRef.value
+  );
+  if (index === -1) {
+    return ElMessage.error("删除失败");
+  }
+  data.value.blocks.splice(index, 1);
+  delete proxy.$refs[currentRef.value];
+  currentRef.value = "";
+  data.value.blocks.forEach((item, index) => {
+    item.focus = false;
+  });
+};
 const clearBlockFocus = () => {
+  if (previewRef.value) return;
   data.value.blocks.forEach((item) => {
     item.focus = false;
   });
@@ -179,6 +247,7 @@ const clearBlockFocus = () => {
 };
 
 const handleMouseDown = (e, item, index) => {
+  if (previewRef.value) return;
   e.preventDefault();
   e.stopPropagation();
   if (e.ctrlKey) {
@@ -323,7 +392,6 @@ const mouseup = (e) => {
   markLine.x = null;
   markLine.y = null;
   if (dragState.dragging) {
-    console.log("mouseup");
     events.emit("end"); // 触发事件就会记住当前的位置
   }
 };
@@ -346,6 +414,7 @@ const drop = (e) => {
         key: currentComponent.key,
         alignCenter: true,
         ref: "blockRef" + blocks.length,
+        value: "",
       },
     ],
   };
@@ -358,18 +427,18 @@ const dragover = (e) => {
 watch(
   () => props.modelValue,
   (value) => {
-    console.log("value");
-
     value.blocks.forEach((item) => {
       nextTick(() => {
-        let { offsetWidth, offsetHeight } = proxy.$refs[item.ref][0];
-        if (item.alignCenter) {
-          item.left = item.left - offsetWidth / 2;
-          item.top = item.top - offsetHeight / 2;
-          item.alignCenter = false;
+        if (proxy.$refs[item.ref]) {
+          let { offsetWidth, offsetHeight } = proxy.$refs[item.ref][0];
+          if (item.alignCenter) {
+            item.left = item.left - offsetWidth / 2;
+            item.top = item.top - offsetHeight / 2;
+            item.alignCenter = false;
+          }
+          item.width = offsetWidth;
+          item.height = offsetHeight;
         }
-        item.width = offsetWidth;
-        item.height = offsetHeight;
       });
     });
   },
@@ -433,14 +502,20 @@ const imports = () => {
       item.ref = "blockRef" + arr.length;
       arr.push(item);
     });
-    console.log(arr);
-
     data.value.blocks = arr;
-
     outerVisible.value = false;
     json.value = "";
   } else {
     ElMessage.error("填写json格式的数据");
   }
+};
+
+const previewRef = ref(false);
+
+const handleData = () => {
+  previewRef.value = !previewRef.value;
+  data.value.blocks.forEach((item) => {
+    item.focus = false;
+  });
 };
 </script>

@@ -17,6 +17,9 @@
           v-if="config.componentMap[item.key].key === 'input'"
           placeholder="请输入"
         ></el-input>
+        <el-select
+          v-if="config.componentMap[item.key].key === 'select'"
+        ></el-select>
         <div v-if="item.label === '文本'">文本</div>
       </div>
     </div>
@@ -102,6 +105,19 @@
               v-if="item.key === 'input'"
               placeholder="请输入"
             ></el-input>
+            <el-select
+              clearable
+              style="width: 200px"
+              v-model="item.value"
+              v-if="item.key === 'select'"
+            >
+              <el-option
+                v-for="(option, index) in item.options"
+                :key="index"
+                :label="option.label"
+                :value="option.value"
+              />
+            </el-select>
             <span v-if="item.key === 'text'">
               {{ item.value ? item.value : "文本" }}
             </span>
@@ -173,7 +189,14 @@ import {
   nextTick,
   reactive,
 } from "vue";
-import { ElButton, ElInput, ElDialog, ElMessage } from "element-plus";
+import {
+  ElButton,
+  ElInput,
+  ElDialog,
+  ElMessage,
+  ElSelect,
+  ElOption,
+} from "element-plus";
 import { useCommands } from "../utils/useCommand";
 import { events } from "../utils/event";
 import full from "core-js/full";

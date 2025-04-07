@@ -71,7 +71,44 @@
         <el-input v-model="button.zIndex"></el-input>
       </div>
     </div>
-
+    <div v-else-if="type === 'select'">
+      <h3>下拉框</h3>
+      <div class="item">
+        <div class="item">绑定内容</div>
+        <div
+          v-for="(item, index) in select.options"
+          :key="index"
+          style="margin-top: 10px"
+        >
+          <div style="display: flex; align-items: center; margin-bottom: 10px">
+            <span style="width: 20%">选项{{ index + 1 }}:</span>
+            <el-input style="width: 50%" v-model="item.label">{{
+              item.label
+            }}</el-input>
+            <div>
+              <el-button
+                style="width: 15px; margin-left: 5px"
+                @click="addSelectOption"
+                >+</el-button
+              >
+              <el-button style="width: 15px" @click="delSelectOption(index)"
+                >-</el-button
+              >
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; margin-bottom: 10px">
+            <span style="width: 20%">值{{ index + 1 }}:</span>
+            <el-input style="width: 80%" v-model="item.value">{{
+              item.value
+            }}</el-input>
+          </div>
+        </div>
+      </div>
+      <div class="item">
+        <div class="item">视觉层级</div>
+        <el-input v-model="select.zIndex"></el-input>
+      </div>
+    </div>
     <div style="display: flex">
       <el-button type="primary" @click="save">应用</el-button>
       <el-button @click="reset">重置</el-button>
@@ -105,6 +142,9 @@ const button = reactive({
   size: undefined,
   value: undefined,
   zIndex: undefined,
+});
+const select = reactive({
+  options: [{ label: "", value: "" }],
 });
 const input = reactive({
   value: "",
@@ -153,10 +193,22 @@ const save = () => {
           data.value.blocks[index][key] = input[key];
         }
       }
+    } else if (props.type === "select") {
+      for (const key in select) {
+        if (select[key] !== undefined && select[key] !== "") {
+          data.value.blocks[index][key] = select[key];
+        }
+      }
     }
   }
 };
 const reset = () => {};
+const addSelectOption = () => {
+  select.options.push({ label: "", value: "" });
+};
+const delSelectOption = (index) => {
+  select.options.splice(index, 1);
+};
 watch(
   () => props.item,
   (newVal) => {
@@ -179,6 +231,11 @@ watch(
       case "input":
         input.value = newVal.value;
         input.zIndex = newVal.zIndex;
+        break;
+
+      case "select":
+        select.options = newVal.options;
+        select.zIndex = newVal.zIndex;
         break;
     }
   },
